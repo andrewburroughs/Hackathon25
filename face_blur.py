@@ -14,7 +14,7 @@ expected_frame_size = None
 frames_since_lost_list = []
 grace_period = 10
 face_saved = False
-output_directory = "saved_faces"
+output_directory = "barry/images"
 os.makedirs(output_directory, exist_ok=True) 
 
 if tracker_type == 'KCF':
