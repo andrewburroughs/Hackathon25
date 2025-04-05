@@ -1,0 +1,50 @@
+Terms of Service
+
+Effective Date: 04/05/2024
+
+Welcome to our hackathon demo application (“App”). Before you dive in, please take a moment to read these Terms of Service ("Terms"). By using this App, you agree to be legally bound by these Terms. If you disagree — or feel uncomfortable — close the App immediately and walk away dramatically.
+
+---------------------------------------------------------------------
+1. Purpose
+This App is a prototype created solely for educational purposes during a hackathon. It is designed to demonstrate real-time audio and video interception, face detection, and data scrambling. It is not intended for public release, commercial use, or ethical tranquility.
+---------------------------------------------------------------------
+2. What This App Does
+By using this App, you acknowledge that:
+
+    1. It accesses your microphone and camera.
+
+    2. It may scramble your voice, blur your face, or do neither, depending on how we feel.
+
+    3. It might send your face and voice to a local server for “processing.”
+
+    4. That “processing” may involve blurring, deepfaking, saving, replaying, or turning you into a meme.
+---------------------------------------------------------------------
+3. No Promises
+We do not guarantee that this App:
+
+    1. Works reliably,
+
+    2. Respects your dignity,
+
+    3. Or won’t randomly post your synthetic voice onto a subreddit called r/DeepFakedByHackers.
+
+Use at your own risk, and ideally with a VPN, sunglasses, and a fake mustache.
+---------------------------------------------------------------------
+4. Data & Privacy
+This is the fun part. By using this App, you:
+
+    1. Grant us access to your camera and microphone.
+
+    2. Acknowledge that data may be stored, analyzed, modified, or made to say things you didn’t say.
+
+    3. Understand that the data might be saved locally, transmitted, or used for dark science.
+---------------------------------------------------------------------
+5. Governing Law
+These Terms are governed by no one, least of all your conscience. You’re in a hackathon. Chaos reigns. Let’s not pretend otherwise.
+---------------------------------------------------------------------
+6. Final Clause
+We reserve the right to your face and audio to do with what we please.
+
+This clause exists solely to make sure you're paying attention.
+
+Please don’t use this App without reading the Terms of Service. Seriously. That’s the whole lesson.
