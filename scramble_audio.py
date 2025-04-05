@@ -66,7 +66,17 @@ def process_audio(audio_array):
     else:
         modulated_audio = audio_array
 
-    return modulated_audio
+
+    # Ensure the output data has the correct length
+    output_chunk_size_samples = CHUNK * CHANNELS
+    if len(modulated_audio) < output_chunk_size_samples:
+        padding = np.zeros(output_chunk_size_samples - len(modulated_audio), dtype=np.int16)
+        modulated_audio = np.concatenate((modulated_audio, padding))
+    elif len(modulated_audio) > output_chunk_size_samples:
+        modulated_audio = modulated_audio[:output_chunk_size_samples]
+
+    modified_data = modulated_audio.tobytes()
+    return modified_data
 
 try:
     input_stream = p.open(format=FORMAT,
@@ -87,17 +97,7 @@ try:
         audio_array = np.frombuffer(data, dtype=np.int16)
 
         modulated_audio = process_audio(audio_array)
-
-        # Ensure the output data has the correct length
-        output_chunk_size_samples = CHUNK * CHANNELS
-        if len(modulated_audio) < output_chunk_size_samples:
-            padding = np.zeros(output_chunk_size_samples - len(modulated_audio), dtype=np.int16)
-            modulated_audio = np.concatenate((modulated_audio, padding))
-        elif len(modulated_audio) > output_chunk_size_samples:
-            modulated_audio = modulated_audio[:output_chunk_size_samples]
-
-        modified_data = modulated_audio.tobytes()
-        output_stream.write(modified_data)
+        output_stream.write(modulated_audio)
 
         audio_chunk_counter += 1
 
