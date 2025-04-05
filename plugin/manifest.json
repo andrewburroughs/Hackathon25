@@ -6,20 +6,23 @@
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": ["<all_urls>"],
   "background": {
-    "service_worker": "background.js"
+    "scripts": ["background.js"] 
   },
   "action": {
     "default_popup": "popup.html",
-    "default_icon": {
-    }
+    "default_icon": {}
   },
-  "icons": {
-
-  },
+  "icons": {},
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "js": ["content.js"]
     }
-  ]
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "privacy-paradox@local",
+      "strict_min_version": "91.0"
+    }
+  }
 }
