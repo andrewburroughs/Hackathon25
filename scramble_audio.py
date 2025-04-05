@@ -11,12 +11,13 @@ RATE = 48000
 p = pyaudio.PyAudio()
 
 # --- Modulation Settings ---
-min_pitch_factor_low = 0.6
-max_pitch_factor_low = 0.8
-min_pitch_factor_high = 1.2
-max_pitch_factor_high = 1.5
-change_probability = 0.7
-change_frequency_factor = 5
+min_pitch_factor_low = 0.5
+max_pitch_factor_low = 0.7
+min_pitch_factor_high = 1.3
+max_pitch_factor_high = 1.6
+change_probability = 0.9
+change_frequency_factor = 3
+min_pitch_change_threshold = 0.15
 
 audio_chunk_counter = 0
 # Initialize with a random modulating pitch factor
@@ -24,6 +25,48 @@ if random.random() < 0.5:
     current_pitch_factor = random.uniform(min_pitch_factor_low, max_pitch_factor_low)
 else:
     current_pitch_factor = random.uniform(min_pitch_factor_high, max_pitch_factor_high)
+
+def process_audio(audio_array):
+    global audio_chunk_counter
+    global current_pitch_factor
+
+    # --- Modulation Settings (Local for clarity) ---
+    min_pitch_factor_low = 0.5   # Further lower
+    max_pitch_factor_low = 0.7   # Further lower
+    min_pitch_factor_high = 1.3  # Further higher
+    max_pitch_factor_high = 1.6  # Further higher
+    change_probability = 0.9     # High probability
+    change_frequency_factor = 3  # More frequent
+    min_pitch_change_threshold = 0.15 # Increased threshold
+
+    if audio_chunk_counter % change_frequency_factor == 0:
+        if random.random() < change_probability:
+            while True: # Loop until we get a factor sufficiently far from 1.0
+                if random.random() < 0.5:
+                    potential_factor = random.uniform(min_pitch_factor_low, max_pitch_factor_low)
+                else:
+                    potential_factor = random.uniform(min_pitch_factor_high, max_pitch_factor_high)
+
+                if abs(potential_factor - 1.0) >= min_pitch_change_threshold:
+                    current_pitch_factor = potential_factor
+                    break # Exit the loop once a valid factor is found
+
+    pitch_factor = current_pitch_factor
+
+    if pitch_factor > 1.0:
+        new_length = int(len(audio_array) / pitch_factor)
+        if new_length > 0:
+            indices = np.round(np.linspace(0, len(audio_array) - 1, new_length)).astype(int)
+            modulated_audio = audio_array[indices]
+        else:
+            modulated_audio = np.array([], dtype=np.int16)
+    elif pitch_factor < 1.0:
+        repeat_factor = int(1 / pitch_factor)
+        modulated_audio = np.repeat(audio_array, repeat_factor)[:len(audio_array)]
+    else:
+        modulated_audio = audio_array
+
+    return modulated_audio
 
 try:
     input_stream = p.open(format=FORMAT,
@@ -43,29 +86,7 @@ try:
         data = input_stream.read(CHUNK)
         audio_array = np.frombuffer(data, dtype=np.int16)
 
-        # --- Random Pitch Modulation ---
-        if audio_chunk_counter % change_frequency_factor == 0:
-            if random.random() < change_probability:
-                if random.random() < 0.5:
-                    current_pitch_factor = random.uniform(min_pitch_factor_low, max_pitch_factor_low)
-                else:
-                    current_pitch_factor = random.uniform(min_pitch_factor_high, max_pitch_factor_high)
-            # Removed the else condition that set current_pitch_factor to 1.0
-
-        pitch_factor = current_pitch_factor
-
-        if pitch_factor > 1.0:
-            new_length = int(len(audio_array) / pitch_factor)
-            if new_length > 0:
-                indices = np.round(np.linspace(0, len(audio_array) - 1, new_length)).astype(int)
-                modulated_audio = audio_array[indices]
-            else:
-                modulated_audio = np.array([], dtype=np.int16)
-        elif pitch_factor < 1.0:
-            repeat_factor = int(1 / pitch_factor)
-            modulated_audio = np.repeat(audio_array, repeat_factor)[:len(audio_array)]
-        else:
-            modulated_audio = audio_array
+        modulated_audio = process_audio(audio_array)
 
         # Ensure the output data has the correct length
         output_chunk_size_samples = CHUNK * CHANNELS
