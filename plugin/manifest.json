@@ -38,8 +38,9 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["scrambler.js"],
+      "resources": ["scrambler.js", "video_procesor.js"],
       "matches": ["<all_urls>"]
     }
+
   ]
 }
