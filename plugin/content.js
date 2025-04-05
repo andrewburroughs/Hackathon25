@@ -14,16 +14,37 @@ const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
 navigator.mediaDevices.getUserMedia = function (constraints) {
   console.log("Website is requesting access to camera/microphone:", constraints);
 
-  // Request access for the extension
-  navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-    .then((stream) => {
-      console.log("Extension also requested access to camera/microphone");
-      // You can handle the stream here if needed
-    })
-    .catch((error) => {
-      console.error("Extension failed to access camera/microphone:", error);
-    });
+  if (constraints.audio) {
+    return originalGetUserMedia.call(navigator.mediaDevices, constraints)
+      .then((stream) => {
+        console.log("Original microphone stream intercepted");
 
-  // Call the original getUserMedia function for the website
+        // Create an AudioContext
+        const audioContext = new AudioContext();
+
+        // Add the AudioWorkletProcessor
+        return audioContext.audioWorklet.addModule('scrambler.js').then(() => {
+          const source = audioContext.createMediaStreamSource(stream);
+          const scramblerNode = new AudioWorkletNode(audioContext, 'scrambler');
+          const destination = audioContext.createMediaStreamDestination();
+
+          // Connect the nodes
+          source.connect(scramblerNode);
+          scramblerNode.connect(destination);
+
+          // Create a new MediaStream with the scrambled audio
+          const scrambledStream = destination.stream;
+
+          console.log("Returning scrambled microphone stream to the website");
+          return scrambledStream; // Return the scrambled stream to the website
+        });
+      })
+      .catch((error) => {
+        console.error("Error accessing microphone:", error);
+        throw error;
+      });
+  }
+
+  // If no audio is requested, call the original getUserMedia
   return originalGetUserMedia.call(navigator.mediaDevices, constraints);
 };
