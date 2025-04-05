@@ -2,6 +2,7 @@ browser.runtime.onInstalled.addListener(() => {
   console.log("Extension installed!");
 });
 
+
 // Listen for messages from the content script
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "greet") {
@@ -15,5 +16,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log(`Media access ended for track: ${message.trackKind}`);
     // Perform any actions you need when media access ends
     sendResponse({ status: "Acknowledged media access ended" });
+  } else if (message.type === "processStream") {
+    console.log("Received microphone stream from content script");
   }
-});
+})

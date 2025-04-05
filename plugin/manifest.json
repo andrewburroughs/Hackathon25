@@ -3,10 +3,10 @@
   "name": "Privacy Paradox",
   "version": "1.0",
   "description": "A browser plugin that protects your privacy.",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": ["storage", "activeTab", "scripting", "webRequest"],
   "host_permissions": ["<all_urls>"],
   "background": {
-    "scripts": ["background.js"] 
+    "scripts": ["background.js"]
   },
   "action": {
     "default_popup": "popup.html",
@@ -16,7 +16,8 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"]
+      "js": ["content.js"],
+      "all_frames": true
     }
   ],
   "browser_specific_settings": {
