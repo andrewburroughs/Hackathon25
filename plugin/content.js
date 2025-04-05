@@ -140,6 +140,12 @@ const ensureAudioContextReady = async () => {
   }
 };
 
+// Declare scrambledStream in a wider scope
+let scrambledStream;
+
+// Create a WeakMap to store the original stream
+const streamMap = new WeakMap();
+
 // Override the getUserMedia function globally
 navigator.mediaDevices.getUserMedia = async function (constraints) {
   console.log("Website is requesting access to camera/microphone:", constraints);
@@ -152,6 +158,9 @@ navigator.mediaDevices.getUserMedia = async function (constraints) {
       return originalGetUserMedia(constraints)
         .then(async (stream) => {
           console.log("Original microphone stream intercepted");
+
+          // Store the original stream in the WeakMap
+          streamMap.set(stream, stream);
 
           // Add the AudioWorkletProcessor
           try {
@@ -175,7 +184,7 @@ navigator.mediaDevices.getUserMedia = async function (constraints) {
           console.log("AudioContext state:", audioContext.state);
 
           // Create a new MediaStream with the scrambled audio
-          const scrambledStream = destination.stream;
+          scrambledStream = destination.stream; // Assign to the global variable
 
           // Inspect the MediaStream
           console.log("Original Stream:", stream);
@@ -274,9 +283,58 @@ const originalGetTracks = MediaStream.prototype.getTracks;
 // Override the getTracks method
 MediaStream.prototype.getTracks = function() {
   console.log("getTracks called on:", this);
-  if (this === originalStream) { // Assuming originalStream is in scope
+  const originalStream = streamMap.get(this);
+  if (originalStream) {
     console.log("Blocking access to original stream's tracks");
     return []; // Return an empty array
   }
   return originalGetTracks.apply(this, arguments);
 };
+
+// Listen for messages from the website
+window.addEventListener('message', function(event) {
+    if (event.data.type === 'REQUEST_SCRAMBLED_STREAM') {
+        console.log("Website requested scrambled stream. Sending stream.");
+        window.postMessage({ type: 'SCRAMBLED_STREAM', stream: scrambledStream }, '*');
+    }
+});
+
+// Inject a script into the web page to expose the scrambledStream
+const script = document.createElement('script');
+script.textContent = `
+  (function() {
+    let scrambledStream;
+
+    // Override navigator.mediaDevices.getUserMedia
+    const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = async function(constraints) {
+      if (constraints.audio) {
+        if (!scrambledStream) {
+          console.log("Creating scrambled stream in the web page context.");
+          const originalStream = await originalGetUserMedia(constraints);
+
+          // Create an AudioContext and scramble the audio
+          const audioContext = new AudioContext();
+          const source = audioContext.createMediaStreamSource(originalStream);
+          const destination = audioContext.createMediaStreamDestination();
+
+          // Add a simple gain node or any other processing node here
+          const gainNode = audioContext.createGain();
+          gainNode.gain.value = 0.5; // Example: Reduce volume by 50%
+          source.connect(gainNode).connect(destination);
+
+          scrambledStream = destination.stream;
+        }
+        return scrambledStream;
+      }
+      return originalGetUserMedia(constraints);
+    };
+
+    // Expose a function to request the scrambled stream
+    window.requestScrambledStream = async function() {
+      return navigator.mediaDevices.getUserMedia({ audio: true });
+    };
+  })();
+`;
+document.documentElement.appendChild(script);
+script.remove();

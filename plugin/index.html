@@ -4,17 +4,80 @@
     <title>Microphone Test</title>
 </head>
 <body>
-    <button id="startButton">Start Microphone</button>
+    <button id="startButton">Start Recording</button>
+    <button id="stopButton" disabled>Stop Recording</button>
     <audio id="audioPlayer" controls autoplay></audio>
     <script>
-        document.getElementById('startButton').addEventListener('click', async () => {
+        let mediaRecorder = null;
+        let audioBlob = null; // Store the recorded audio blob
+        let audioUrl = null;  // Store the URL for the recorded audio
+        let scrambledStream = null;
+
+        // Function to start recording
+        async function startRecording() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                document.getElementById('audioPlayer').srcObject = stream;
+                // Request the scrambled stream
+                scrambledStream = await window.requestScrambledStream();
+                console.log("Received scrambled stream:", scrambledStream);
+
+                // Set up the audio player to use the scrambled stream
+                const audioPlayer = document.getElementById('audioPlayer');
+                audioPlayer.srcObject = scrambledStream;
+                audioPlayer.play(); // Start playing the live stream
+
+                // Create a new MediaRecorder instance
+                mediaRecorder = new MediaRecorder(scrambledStream);
+
+                // Handle data availability
+                const audioChunks = [];
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+
+                // Handle stop event
+                mediaRecorder.onstop = () => {
+                    console.log("Recording stopped. Processing audio...");
+                    audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    audioUrl = URL.createObjectURL(audioBlob);
+
+                    // Set the audio player to play the recorded audio
+                    audioPlayer.srcObject = null; // Clear the live stream
+                    audioPlayer.src = audioUrl; // Set the recorded audio
+                    audioPlayer.play(); // Play the recorded audio
+
+                    console.log("Audio saved and ready for replay.");
+                };
+
+                // Start recording
+                mediaRecorder.start();
+                console.log("Recording started...");
+                document.getElementById('startButton').disabled = true;
+                document.getElementById('stopButton').disabled = false;
             } catch (error) {
                 console.error("Error accessing microphone:", error);
             }
-        });
+        }
+
+        // Function to stop recording
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                mediaRecorder.stop(); // Stop the recording
+                console.log("Stopping recording...");
+                document.getElementById('startButton').disabled = false;
+                document.getElementById('stopButton').disabled = true;
+
+                // Pause the live stream playback
+                const audioPlayer = document.getElementById('audioPlayer');
+                audioPlayer.pause();
+                audioPlayer.srcObject = null; // Clear the live stream
+            } else {
+                console.warn("MediaRecorder is not recording.");
+            }
+        }
+
+        // Event listeners
+        document.getElementById('startButton').addEventListener('click', startRecording);
+        document.getElementById('stopButton').addEventListener('click', stopRecording);
     </script>
 </body>
 </html>
