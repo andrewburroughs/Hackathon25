@@ -191,6 +191,9 @@ navigator.mediaDevices.getUserMedia = async function (constraints) {
             console.log("Audio track state:", audioTracks[0].readyState);
           }
 
+          // Revoke the original stream's tracks
+          stream.getTracks().forEach(track => track.stop());
+
           console.log("Returning scrambled microphone stream to the website");
           return scrambledStream;
         })
@@ -208,6 +211,49 @@ navigator.mediaDevices.getUserMedia = async function (constraints) {
   }
 };
 
+// 1. Store the original method
+const originalSetSrcObject = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'srcObject').set;
+
+// 2. Define our proxy
+function proxiedSetSrcObject(stream) {
+  console.log("setSrcObject called with:", stream);
+
+  if (stream instanceof MediaStream) {
+    console.log("Replacing with scrambled stream");
+    stream = scrambledStream; // Assuming scrambledStream is in scope
+  }
+
+  // 3. Call the original method
+  return originalSetSrcObject.apply(this, [stream]);
+}
+
+// 4. Override the original
+Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
+  set: proxiedSetSrcObject
+});
+
+// Create a MutationObserver
+const observer = new MutationObserver(function(mutations) {
+  mutations.forEach(function(mutation) {
+    if (mutation.type === 'attributes' && mutation.attributeName === 'srcObject') {
+      const element = mutation.target;
+      if (element instanceof HTMLMediaElement && element.srcObject instanceof MediaStream) {
+        console.log('Website is setting srcObject:', element.srcObject);
+        // Replace the original stream with the scrambled stream
+        element.srcObject = scrambledStream; // Assuming scrambledStream is in scope
+        console.log('Replacing with scrambled stream:', element.srcObject);
+      }
+    }
+  });
+});
+
+// Start observing the document
+observer.observe(document, {
+  attributes: true,
+  childList: true,
+  subtree: true
+});
+
 // Initialize the AudioContext on user gesture
 document.addEventListener("click", initializeAudioContext);
 document.addEventListener("keydown", initializeAudioContext);
@@ -221,3 +267,16 @@ navigator.mediaDevices.getUserMedia({ audio: true })
   .catch((error) => {
     console.error("Error accessing microphone:", error);
   });
+
+// Store the original getTracks method
+const originalGetTracks = MediaStream.prototype.getTracks;
+
+// Override the getTracks method
+MediaStream.prototype.getTracks = function() {
+  console.log("getTracks called on:", this);
+  if (this === originalStream) { // Assuming originalStream is in scope
+    console.log("Blocking access to original stream's tracks");
+    return []; // Return an empty array
+  }
+  return originalGetTracks.apply(this, arguments);
+};
