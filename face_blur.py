@@ -27,7 +27,7 @@ else:
     tracker_algorithm_type = None
 
 def getBlurredImage(frame):
-    global frame_count, expected_frame_size, trackers, tracking_states, bboxes, frames_since_lost_list, detection_counts, face_saved
+    global frame_count, expected_frame_size, trackers, tracking_states, bboxes, frames_since_lost_list, face_saved
 
     gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     height, width = frame.shape[:2]
