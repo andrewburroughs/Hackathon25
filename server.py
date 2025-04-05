@@ -6,6 +6,8 @@ import numpy as np
 import os
 import pyaudio
 import random
+import wave
+import io
 
 app = FastAPI()
 
@@ -27,15 +29,18 @@ RATE = 48000
 p = pyaudio.PyAudio()
 
 # --- Modulation Settings ---
-min_pitch_factor_low = 0.5
-max_pitch_factor_low = 0.7
-min_pitch_factor_high = 1.3
-max_pitch_factor_high = 1.6
+min_pitch_factor_low = 0.7   # Closer to 1.0
+max_pitch_factor_low = 0.9   # Closer to 1.0
+min_pitch_factor_high = 1.1  # Closer to 1.0
+max_pitch_factor_high = 1.3  # Closer to 1.0
 change_probability = 0.9
 change_frequency_factor = 3
-min_pitch_change_threshold = 0.15
+min_pitch_change_threshold = 0.20 # Increased threshold
+robotic_factor = 0.2
+distortion_level = 0.15
 
 audio_chunk_counter = 0
+current_pitch_factor = 1.0 # Initialize
 # Initialize with a random modulating pitch factor
 if random.random() < 0.5:
     current_pitch_factor = random.uniform(min_pitch_factor_low, max_pitch_factor_low)
@@ -54,7 +59,7 @@ expected_frame_size = None
 frames_since_lost_list = []
 grace_period = 10
 face_saved = False
-output_directory = "saved_faces"
+output_directory = "barry"
 os.makedirs(output_directory, exist_ok=True)
 
 if tracker_type == 'KCF':
@@ -142,30 +147,22 @@ def getBlurredImage(frame):
 
     return frame
 
-def process_audio(audio_array):
+
+def process_audio_chunk(audio_bytes: bytes, rate: int, channels: int, sample_width: int):
     global audio_chunk_counter
     global current_pitch_factor
 
-    # --- Modulation Settings (Local for clarity) ---
-    min_pitch_factor_low = 0.5   # Further lower
-    max_pitch_factor_low = 0.7   # Further lower
-    min_pitch_factor_high = 1.3  # Further higher
-    max_pitch_factor_high = 1.6  # Further higher
-    change_probability = 0.9     # High probability
-    change_frequency_factor = 3  # More frequent
-    min_pitch_change_threshold = 0.15 # Increased threshold
+    audio_array = np.frombuffer(audio_bytes, dtype=np.int16)
 
     if audio_chunk_counter % change_frequency_factor == 0:
         if random.random() < change_probability:
-            while True: # Loop until we get a factor sufficiently far from 1.0
-                if random.random() < 0.5:
-                    potential_factor = random.uniform(min_pitch_factor_low, max_pitch_factor_low)
-                else:
-                    potential_factor = random.uniform(min_pitch_factor_high, max_pitch_factor_high)
+            if random.random() < 0.5:
+                potential_factor = random.uniform(min_pitch_factor_low, max_pitch_factor_low)
+            else:
+                potential_factor = random.uniform(min_pitch_factor_high, max_pitch_factor_high)
 
-                if abs(potential_factor - 1.0) >= min_pitch_change_threshold:
-                    current_pitch_factor = potential_factor
-                    break # Exit the loop once a valid factor is found
+            if abs(potential_factor - 1.0) >= min_pitch_change_threshold:
+                current_pitch_factor = round(potential_factor / robotic_factor) * robotic_factor
 
     pitch_factor = current_pitch_factor
 
@@ -182,17 +179,69 @@ def process_audio(audio_array):
     else:
         modulated_audio = audio_array
 
+    max_amplitude = np.iinfo(np.int16).max
+    clip_threshold = int(max_amplitude * (1.0 - distortion_level))
+    modulated_audio = np.clip(modulated_audio, -clip_threshold, clip_threshold)
 
-    # Ensure the output data has the correct length
-    output_chunk_size_samples = CHUNK * CHANNELS
-    if len(modulated_audio) < output_chunk_size_samples:
-        padding = np.zeros(output_chunk_size_samples - len(modulated_audio), dtype=np.int16)
-        modulated_audio = np.concatenate((modulated_audio, padding))
-    elif len(modulated_audio) > output_chunk_size_samples:
-        modulated_audio = modulated_audio[:output_chunk_size_samples]
+    audio_chunk_counter += 1
+    return modulated_audio.tobytes()
 
-    modified_data = modulated_audio.tobytes()
-    return modified_data
+
+def process_full_audio(audio_bytes: bytes):
+    global audio_chunk_counter, current_pitch_factor
+    audio_chunk_counter = 0
+    current_pitch_factor = 1.0 # Reset for full file
+
+    audio_stream = io.BytesIO(audio_bytes)
+    with wave.open(audio_stream, 'rb') as wf:
+        num_channels = wf.getnchannels()
+        sample_width = wf.getsampwidth()
+        frame_rate = wf.getframerate()
+        original_frames = wf.readframes(wf.getnframes())
+
+    scrambled_frames = b""
+    chunk_size = CHUNK # Use the global CHUNK size
+    for i in range(0, len(original_frames), chunk_size):
+        chunk = original_frames[i:i + chunk_size]
+        if chunk:
+            scrambled_chunk = process_audio_chunk(chunk, frame_rate, num_channels, sample_width)
+            scrambled_frames += scrambled_chunk
+
+    output_wav_stream = io.BytesIO()
+    with wave.open(output_wav_stream, 'wb') as out_wf:
+        out_wf.setnchannels(num_channels)
+        out_wf.setsampwidth(sample_width)
+        out_wf.setframerate(frame_rate)
+        out_wf.writeframes(scrambled_frames)
+
+    output_wav_stream.seek(0)
+    return output_wav_stream.getvalue(), num_channels, sample_width, frame_rate
+
+@app.post("/scramble_full_file")
+async def scramble_full_wav_file(file: UploadFile = File(...)):
+    if file.content_type != "audio/wav":
+        return Response("Invalid file type. Only WAV files are supported.", status_code=400)
+
+    try:
+        audio_bytes = await file.read()
+        scrambled_audio_data, num_channels, sample_width, frame_rate = process_full_audio(audio_bytes)
+
+        with open("scrambled_recording.wav", 'wb') as outfile:
+            with wave.open(outfile, 'wb') as wf:
+                wf.setnchannels(num_channels)
+                wf.setsampwidth(sample_width)
+                wf.setframerate(frame_rate)
+                wf.writeframes(scrambled_audio_data)
+
+        return Response("Scrambled audio saved to scrambled_recording.wav", status_code=200)
+
+    except Exception as e:
+        return Response(f"Error processing file: {e}", status_code=500)
+
+@app.post("/scramble_chunk")
+async def scramble_audio_chunk(audio_chunk: bytes = File(...), rate: int = RATE, channels: int = CHANNELS, sample_width: int = 2):
+    scrambled_chunk = process_audio_chunk(audio_chunk, rate, channels, sample_width)
+    return Response(content=scrambled_chunk, media_type="application/octet-stream")
 
 @app.post("/blur")
 async def blur_image(file: UploadFile = File(...)):
@@ -206,15 +255,3 @@ async def blur_image(file: UploadFile = File(...)):
     blurred = getBlurredImage(frame)
     _, encoded = cv2.imencode(".jpg", blurred)
     return Response(encoded.tobytes(), media_type="image/jpeg")
-
-@app.post("/scramble")
-async def blur_image(file: UploadFile = File(...)):
-    content = await file.read()
-    np_arr = np.frombuffer(content, np.uint8)
-    frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-
-    if frame is None:
-        return Response("Invalid image", status_code=400)
-
-    scrambled = process_audio(frame)
-    return Response(scrambled, media_type="video/mp4")

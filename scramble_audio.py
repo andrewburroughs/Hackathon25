@@ -11,13 +11,13 @@ RATE = 48000
 p = pyaudio.PyAudio()
 
 # --- Modulation Settings ---
-min_pitch_factor_low = 0.5
-max_pitch_factor_low = 0.7
-min_pitch_factor_high = 1.3
-max_pitch_factor_high = 1.6
+min_pitch_factor_low = 0.7   # Closer to 1.0 (less extreme low)
+max_pitch_factor_low = 0.9   # Closer to 1.0 (less extreme low)
+min_pitch_factor_high = 1.1  # Closer to 1.0 (less extreme high)
+max_pitch_factor_high = 1.3  # Closer to 1.0 (less extreme high)
 change_probability = 0.9
 change_frequency_factor = 3
-min_pitch_change_threshold = 0.15
+min_pitch_change_threshold = 0.15 # Keep this to ensure a noticeable shift
 
 audio_chunk_counter = 0
 # Initialize with a random modulating pitch factor
@@ -31,13 +31,13 @@ def process_audio(audio_array):
     global current_pitch_factor
 
     # --- Modulation Settings (Local for clarity) ---
-    min_pitch_factor_low = 0.5   # Further lower
-    max_pitch_factor_low = 0.7   # Further lower
-    min_pitch_factor_high = 1.3  # Further higher
-    max_pitch_factor_high = 1.6  # Further higher
+    min_pitch_factor_low = 0.7   # Closer to 1.0
+    max_pitch_factor_low = 0.9   # Closer to 1.0
+    min_pitch_factor_high = 1.1  # Closer to 1.0
+    max_pitch_factor_high = 1.3  # Closer to 1.0
     change_probability = 0.9     # High probability
     change_frequency_factor = 3  # More frequent
-    min_pitch_change_threshold = 0.15 # Increased threshold
+    min_pitch_change_threshold = 0.15 # Keep this
 
     if audio_chunk_counter % change_frequency_factor == 0:
         if random.random() < change_probability:
