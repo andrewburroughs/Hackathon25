@@ -14,6 +14,15 @@ const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
 navigator.mediaDevices.getUserMedia = function (constraints) {
   console.log("Website is requesting access to camera/microphone:", constraints);
 
+  // Notify the background script that media access is being requested
+  browser.runtime.sendMessage({ type: "mediaAccessRequested", constraints })
+    .then((response) => {
+      console.log("Background script acknowledged media access request:", response);
+    })
+    .catch((error) => {
+      console.error("Error sending message to background script:", error);
+    });
+
   if (constraints.audio) {
     return originalGetUserMedia.call(navigator.mediaDevices, constraints)
       .then((stream) => {
@@ -34,6 +43,16 @@ navigator.mediaDevices.getUserMedia = function (constraints) {
 
           // Create a new MediaStream with the scrambled audio
           const scrambledStream = destination.stream;
+
+          // Monitor the tracks in the scrambled stream
+          scrambledStream.getTracks().forEach((track) => {
+            console.log(`Track started: ${track.kind}`);
+            track.addEventListener("ended", () => {
+              console.log(`Track ended: ${track.kind}`);
+              // Notify the background script when media access ends
+              browser.runtime.sendMessage({ type: "mediaAccessEnded", trackKind: track.kind });
+            });
+          });
 
           console.log("Returning scrambled microphone stream to the website");
           return scrambledStream; // Return the scrambled stream to the website
