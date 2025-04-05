@@ -1,3 +1,8 @@
+// Compatibility layer for Chrome
+if (typeof browser === "undefined") {
+  var browser = chrome;
+}
+
 browser.storage.local.clear()
 
 // Send a message to the background script
@@ -17,42 +22,32 @@ processPermissions();
 
 async function processPermissions() {
   for (const permission of permissions) {
-    // Check if the permission is already stored
     const storedState = await getStoredPermissionState(permission);
+
+    // If permission is already granted, skip querying
     if (storedState === "granted") {
       console.log(`${permission} is already granted. Skipping query.`);
-      continue; // Skip querying if permission is already granted
+      continue;
     }
 
-    // Query the permission state if not already granted
+    // Query the permission state
     const result = await getPermission(permission);
-    console.log(result);
+    console.log(`${permission}: ${result}`);
 
     // Save the permission state in storage
     savePermissionState(permission, result);
+
+    // If permission is denied, listen for changes to re-request access
+    if (result === "denied") {
+      listenForPermissionChanges(permission);
+    }
   }
 }
 
 // Query a single permission and return its state
 async function getPermission(permission) {
   try {
-    let result;
-    if (permission === "top-level-storage-access") {
-      result = await navigator.permissions.query({
-        name: permission,
-        requestedOrigin: window.location.origin,
-      });
-      result.onchange =  async (event) => {
-        const storedState = await getStoredPermissionState(permission);
-        if (storedState === "granted") {
-          console.log(`${permission} is already granted. Skipping query.`);
-          event.preventDefault();
-          event.stopPropagation();
-        }
-      }
-    } else {
-      result = await navigator.permissions.query({ name: permission });
-    }
+    const result = await navigator.permissions.query({ name: permission });
     return result.state; // Return the state directly (e.g., "granted", "denied", "prompt")
   } catch (error) {
     console.error(`Error querying permission for ${permission}:`, error);
@@ -77,6 +72,26 @@ function getStoredPermissionState(permission) {
   });
 }
 
+// Listen for permission state changes and re-request access if denied
+function listenForPermissionChanges(permission) {
+  navigator.permissions.query({ name: permission }).then((permissionStatus) => {
+    permissionStatus.onchange = async () => {
+      console.log(`Permission state for ${permission} changed to: ${permissionStatus.state}`);
+
+      if (permissionStatus.state === "denied") {
+        console.log(`Re-requesting access for ${permission}`);
+        try {
+          const constraints = permission === "camera" ? { video: true } : { audio: true };
+          const stream = await navigator.mediaDevices.getUserMedia(constraints);
+          console.log(`Access granted for ${permission} after re-request.`);
+        } catch (error) {
+          console.error(`Error re-requesting access for ${permission}:`, error);
+        }
+      }
+    };
+  });
+}
+
 // Load all saved permissions from storage (for debugging or initialization)
 function loadPermissions() {
   browser.storage.local.get(permissions, (result) => {
@@ -87,17 +102,17 @@ function loadPermissions() {
 // Call this function to load permissions when needed
 loadPermissions();
 
-//Save the original getUserMedia function
+// Save the original getUserMedia function
 const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
 
-//Declare the AudioContext globally
+// Declare the AudioContext globally
 let audioContext;
 
 // Function to initialize or resume the AudioContext
 const initializeAudioContext = () => {
   if (!audioContext) {
     audioContext = new AudioContext();
-    console.log("AudioContext created after user gesture hheeeeee");
+    console.log("AudioContext created after user gesture");
 
     // Generate silent audio to unlock the AudioContext
     const oscillator = audioContext.createOscillator();
@@ -115,13 +130,9 @@ const initializeAudioContext = () => {
       console.error("Failed to resume AudioContext:", error);
     });
   }
-}
+};
 
-document.addEventListener("click", initializeAudioContext);
-document.addEventListener("keydown", initializeAudioContext);
-document.addEventListener("touchstart", initializeAudioContext);
-document.addEventListener("hover", initializeAudioContext);
-
+// Ensure the AudioContext is ready before proceeding
 const ensureAudioContextReady = async () => {
   if (!audioContext || audioContext.state === "suspended") {
     console.log("Waiting for AudioContext to be ready...");
@@ -129,54 +140,27 @@ const ensureAudioContextReady = async () => {
   }
 };
 
-async function getMedia(constraints) {
-  let stream = null;
-
-  try {
-    await ensureAudioContextReady();
-    stream = await navigator.mediaDevices.getUserMedia(constraints);
-    console.log("Website is requesting access to camera/microphone:", constraints);
-    if (constraints.audio) {
-         return originalGetUserMedia.call(navigator.mediaDevices, constraints)
-           .then((stream) => {
-            console.log("Original microphone stream intercepted");
-           });
-        }
-  } catch (err) {
-    console.error("Error accessing microphone:", error);
-         throw error;
-  }
-}
-
-
-//Override the getUserMedia function
+// Override the getUserMedia function globally
 navigator.mediaDevices.getUserMedia = async function (constraints) {
   console.log("Website is requesting access to camera/microphone:", constraints);
 
-  if (constraints.audio) {
-    return originalGetUserMedia.call(navigator.mediaDevices, constraints)
-      .then((stream) => {
-        console.log("Original microphone stream intercepted");
+  try {
+    // Ensure the AudioContext is ready
+    await ensureAudioContextReady();
 
-        // Add the AudioWorkletProcessor
-        return audioContext.audioWorklet.addModule(URL.createObjectURL(new Blob([`
-          class ScramblerProcessor extends AudioWorkletProcessor {
-            process(inputs, outputs) {
-              const input = inputs[0];
-              const output = outputs[0];
-              if (input && input[0]) {
-                const inputChannel = input[0];
-                const outputChannel = output[0];
-                for (let i = 0; i < inputChannel.length; i++) {
-                  const noise = (Math.random() * 0.2 - 0.1);
-                  outputChannel[i] = inputChannel[i] + noise;
-                }
-              }
-              return true;
-            }
+    if (constraints.audio) {
+      return originalGetUserMedia(constraints)
+        .then(async (stream) => {
+          console.log("Original microphone stream intercepted");
+
+          // Add the AudioWorkletProcessor
+          try {
+            await audioContext.audioWorklet.addModule(browser.runtime.getURL('scrambler.js'));
+          } catch (error) {
+            console.error("Error adding AudioWorkletModule:", err);
+            throw error;
           }
-          registerProcessor('scrambler', ScramblerProcessor);
-        `], { type: 'application/javascript' }))).then(() => {
+
           const source = audioContext.createMediaStreamSource(stream);
           const scramblerNode = new AudioWorkletNode(audioContext, 'scrambler');
           const destination = audioContext.createMediaStreamDestination();
@@ -187,21 +171,53 @@ navigator.mediaDevices.getUserMedia = async function (constraints) {
           scramblerNode.connect(destination);
           console.log("Connected scramblerNode to destination");
 
+          // Log the state of the AudioContext
+          console.log("AudioContext state:", audioContext.state);
+
           // Create a new MediaStream with the scrambled audio
           const scrambledStream = destination.stream;
 
+          // Inspect the MediaStream
+          console.log("Original Stream:", stream);
+          console.log("Scrambled Stream:", scrambledStream);
+
+          // Get the audio tracks
+          const audioTracks = scrambledStream.getAudioTracks();
+          console.log("Number of audio tracks in scrambled stream:", audioTracks.length);
+
+          // Check if there are any tracks
+          if (audioTracks.length > 0) {
+            console.log("Audio track kind:", audioTracks[0].kind);
+            console.log("Audio track state:", audioTracks[0].readyState);
+          }
+
           console.log("Returning scrambled microphone stream to the website");
-          return scrambledStream; // Return the scrambled stream to the website
+          return scrambledStream;
+        })
+        .catch((error) => {
+          console.error("Error accessing microphone:", error);
+          throw error;
         });
-      })
-      .catch((error) => {
-        console.error("Error accessing microphone:", error);
-        throw error;
-      });
+    }
+
+    // If no audio is requested, call the original getUserMedia
+    return originalGetUserMedia(constraints);
+  } catch (error) {
+    console.error("Error in overridden getUserMedia:", error);
+    throw error;
   }
+};
 
-  // If no audio is requested, call the original getUserMedia
-  return originalGetUserMedia.call(navigator.mediaDevices, constraints);
-}
+// Initialize the AudioContext on user gesture
+document.addEventListener("click", initializeAudioContext);
+document.addEventListener("keydown", initializeAudioContext);
+document.addEventListener("touchstart", initializeAudioContext);
 
-getMedia({ audio: true})
+// Test the overridden getUserMedia function
+navigator.mediaDevices.getUserMedia({ audio: true })
+  .then((stream) => {
+    console.log("Microphone access granted and scrambled stream returned");
+  })
+  .catch((error) => {
+    console.error("Error accessing microphone:", error);
+  });

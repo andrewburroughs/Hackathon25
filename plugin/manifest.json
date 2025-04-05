@@ -25,5 +25,11 @@
       "id": "privacy-paradox@local",
       "strict_min_version": "91.0"
     }
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["scrambler.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
